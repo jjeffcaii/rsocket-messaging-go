@@ -1,4 +1,4 @@
-package messaging
+package internal
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
-	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/extension"
 	"github.com/rsocket/rsocket-go/payload"
 )
@@ -25,48 +24,14 @@ func init() {
 	RegisterEncoder(extension.ApplicationXML.String(), xml.Marshal)
 }
 
-type Requester struct {
-	encoders     map[string]FnEncode
-	dataMimeType string
-	socket       rsocket.RSocket
-}
-
-func (p *Requester) Close() (err error) {
-	if c, ok := p.socket.(rsocket.CloseableRSocket); ok {
-		err = c.Close()
-	}
-	return
-}
-
-type RequestSpec struct {
-	parent *Requester
+type requestSpec struct {
+	parent *requester
 	m      []Writeable
 	d      func() ([]byte, error)
 }
 
-func NewRequester(socket rsocket.RSocket) *Requester {
-	encoders := make(map[string]FnEncode)
-	for k, v := range _defaultEncodes {
-		encoders[k] = v
-	}
-	return &Requester{
-		encoders:     encoders,
-		dataMimeType: extension.ApplicationJSON.String(),
-		socket:       socket,
-	}
-}
-
-func (p Requester) getDataEncoder() (FnEncode, bool) {
-	return p.getEncoder(p.dataMimeType)
-}
-
-func (p Requester) getEncoder(mimeType string) (enc FnEncode, ok bool) {
-	enc, ok = p.encoders[mimeType]
-	return
-}
-
-func (p *Requester) Route(route string, args ...interface{}) *RequestSpec {
-	return &RequestSpec{
+func (p *requester) Route(route string, args ...interface{}) *requestSpec {
+	return &requestSpec{
 		parent: p,
 		m: []Writeable{
 			func(writer io.Writer) (err error) {
@@ -84,7 +49,7 @@ func (p *Requester) Route(route string, args ...interface{}) *RequestSpec {
 	}
 }
 
-func (p *RequestSpec) Metadata(metadata interface{}, mimeType string) *RequestSpec {
+func (p *requestSpec) Metadata(metadata interface{}, mimeType string) *requestSpec {
 	p.m = append(p.m, func(writer io.Writer) (err error) {
 		enc, ok := p.parent.getEncoder(mimeType)
 		if !ok {
@@ -102,7 +67,7 @@ func (p *RequestSpec) Metadata(metadata interface{}, mimeType string) *RequestSp
 	return p
 }
 
-func (p *RequestSpec) Data(data interface{}) *RequestSpec {
+func (p *requestSpec) Data(data interface{}) *requestSpec {
 	p.d = func() (raw []byte, err error) {
 		enc, ok := p.parent.getDataEncoder()
 		if !ok {
@@ -114,7 +79,7 @@ func (p *RequestSpec) Data(data interface{}) *RequestSpec {
 	return p
 }
 
-func (p *RequestSpec) RetrieveMono() Mono {
+func (p *requestSpec) RetrieveMono() Mono {
 	var (
 		data     []byte
 		metadata []byte
@@ -123,7 +88,7 @@ func (p *RequestSpec) RetrieveMono() Mono {
 		bf := bytes.Buffer{}
 		for _, writeable := range p.m {
 			if err := writeable(&bf); err != nil {
-				return withError(err)
+				return NewMonoWithError(err)
 			}
 		}
 		metadata = bf.Bytes()
@@ -132,14 +97,14 @@ func (p *RequestSpec) RetrieveMono() Mono {
 		var err error
 		d, err := p.d()
 		if err != nil {
-			return withError(err)
+			return NewMonoWithError(err)
 		}
 		data = d
 	}
 
 	req := payload.New(data, metadata)
 	res := p.parent.socket.RequestResponse(req)
-	return newExtraMono(res, func(raw []byte, v interface{}) error {
+	return NewMonoWithDecoder(res, func(raw []byte, v interface{}) error {
 		return json.Unmarshal(raw, v)
 	})
 }

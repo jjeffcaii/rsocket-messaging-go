@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jjeffcaii/rsocket-messaging-go"
+	"github.com/jjeffcaii/rsocket-messaging-go/internal"
 	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/extension"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ func TestRequestSpec_Data(t *testing.T) {
 		Start(context.Background())
 	require.NoError(t, err)
 
-	err = messaging.NewRequester(sk).
+	err = internal.NewRequester(sk).
 		Route("student.v1").
 		Metadata(a, extension.ApplicationJSON.String()).
 		Data(1).

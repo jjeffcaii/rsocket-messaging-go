@@ -1,4 +1,4 @@
-package messaging
+package internal
 
 import (
 	"context"
@@ -34,13 +34,13 @@ func (e *extraMono) BlockTo(ctx context.Context, to interface{}) (err error) {
 	return
 }
 
-func withError(err error) Mono {
-	return mustErrorMono{
+func NewMonoWithError(err error) *mustErrorMono {
+	return &mustErrorMono{
 		Mono: mono.Error(err),
 	}
 }
 
-func newExtraMono(origin mono.Mono, decode FnDecode) Mono {
+func NewMonoWithDecoder(origin mono.Mono, decode FnDecode) *extraMono {
 	return &extraMono{
 		Mono: origin,
 		dec:  decode,
