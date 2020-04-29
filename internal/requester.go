@@ -1,6 +1,10 @@
 package internal
 
 import (
+	"fmt"
+	"io"
+
+	"github.com/jjeffcaii/rsocket-messaging-go/spi"
 	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/extension"
 )
@@ -9,6 +13,25 @@ type requester struct {
 	encoders     map[string]FnEncode
 	dataMimeType string
 	socket       rsocket.RSocket
+}
+
+func (p *requester) Route(route string, args ...interface{}) spi.RequestSpec {
+	return &requestSpec{
+		parent: p,
+		m: []Writeable{
+			func(writer io.Writer) (err error) {
+				b, err := extension.EncodeRouting(fmt.Sprintf(route, args...))
+				if err != nil {
+					return
+				}
+				_, err = extension.NewCompositeMetadata(extension.MessageRouting.String(), b).WriteTo(writer)
+				if err != nil {
+					return
+				}
+				return
+			},
+		},
+	}
 }
 
 func (p *requester) Close() (err error) {
@@ -27,14 +50,14 @@ func (p requester) getEncoder(mimeType string) (enc FnEncode, ok bool) {
 	return
 }
 
-func NewRequester(socket rsocket.RSocket) *requester {
+func NewRequester(socket rsocket.RSocket, dataMimeType string) *requester {
 	encoders := make(map[string]FnEncode)
 	for k, v := range _defaultEncodes {
 		encoders[k] = v
 	}
 	return &requester{
 		encoders:     encoders,
-		dataMimeType: extension.ApplicationJSON.String(),
+		dataMimeType: dataMimeType,
 		socket:       socket,
 	}
 }

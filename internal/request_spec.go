@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/jjeffcaii/rsocket-messaging-go/spi"
 	"github.com/pkg/errors"
 	"github.com/rsocket/rsocket-go/extension"
 	"github.com/rsocket/rsocket-go/payload"
@@ -22,6 +23,22 @@ type FnDecode = func([]byte, interface{}) error
 func init() {
 	RegisterEncoder(extension.ApplicationJSON.String(), json.Marshal)
 	RegisterEncoder(extension.ApplicationXML.String(), xml.Marshal)
+	RegisterEncoder(extension.TextPlain.String(), func(v interface{}) ([]byte, error) {
+		switch vv := v.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			return []byte(fmt.Sprintf("%d", vv)), nil
+		case float32, float64:
+			return []byte(fmt.Sprintf("%f", vv)), nil
+		case []byte:
+			return vv, nil
+		case string:
+			return []byte(vv), nil
+		case fmt.Stringer:
+			return []byte(vv.String()), nil
+		default:
+			return []byte(fmt.Sprintf("%v", vv)), nil
+		}
+	})
 }
 
 type requestSpec struct {
@@ -30,26 +47,7 @@ type requestSpec struct {
 	d      func() ([]byte, error)
 }
 
-func (p *requester) Route(route string, args ...interface{}) *requestSpec {
-	return &requestSpec{
-		parent: p,
-		m: []Writeable{
-			func(writer io.Writer) (err error) {
-				b, err := extension.EncodeRouting(fmt.Sprintf(route, args...))
-				if err != nil {
-					return
-				}
-				_, err = extension.NewCompositeMetadata(extension.MessageRouting.String(), b).WriteTo(writer)
-				if err != nil {
-					return
-				}
-				return
-			},
-		},
-	}
-}
-
-func (p *requestSpec) Metadata(metadata interface{}, mimeType string) *requestSpec {
+func (p *requestSpec) Metadata(metadata interface{}, mimeType string) spi.RequestSpec {
 	p.m = append(p.m, func(writer io.Writer) (err error) {
 		enc, ok := p.parent.getEncoder(mimeType)
 		if !ok {
@@ -67,7 +65,7 @@ func (p *requestSpec) Metadata(metadata interface{}, mimeType string) *requestSp
 	return p
 }
 
-func (p *requestSpec) Data(data interface{}) *requestSpec {
+func (p *requestSpec) Data(data interface{}) spi.RequestSpec {
 	p.d = func() (raw []byte, err error) {
 		enc, ok := p.parent.getDataEncoder()
 		if !ok {
@@ -79,7 +77,7 @@ func (p *requestSpec) Data(data interface{}) *requestSpec {
 	return p
 }
 
-func (p *requestSpec) RetrieveMono() Mono {
+func (p *requestSpec) mkRequest() (payload.Payload, error) {
 	var (
 		data     []byte
 		metadata []byte
@@ -88,7 +86,7 @@ func (p *requestSpec) RetrieveMono() Mono {
 		bf := bytes.Buffer{}
 		for _, writeable := range p.m {
 			if err := writeable(&bf); err != nil {
-				return NewMonoWithError(err)
+				return nil, err
 			}
 		}
 		metadata = bf.Bytes()
@@ -97,18 +95,38 @@ func (p *requestSpec) RetrieveMono() Mono {
 		var err error
 		d, err := p.d()
 		if err != nil {
-			return NewMonoWithError(err)
+			return nil, err
 		}
 		data = d
 	}
+	return payload.New(data, metadata), nil
+}
 
-	req := payload.New(data, metadata)
+func (p *requestSpec) RetrieveMono() spi.Mono {
+	req, err := p.mkRequest()
+	if err != nil {
+		return NewMonoWithError(err)
+	}
 	res := p.parent.socket.RequestResponse(req)
 	return NewMonoWithDecoder(res, func(raw []byte, v interface{}) error {
 		return json.Unmarshal(raw, v)
 	})
 }
 
+func (p *requestSpec) Retrieve() error {
+	req, err := p.mkRequest()
+	if err != nil {
+		return err
+	}
+	p.parent.socket.FireAndForget(req)
+	return nil
+}
+
 func RegisterEncoder(mimeType string, encoder FnEncode) {
 	_defaultEncodes[mimeType] = encoder
+}
+
+func LoadEncoder(mimeType string) (FnEncode, bool) {
+	found, ok := _defaultEncodes[mimeType]
+	return found, ok
 }

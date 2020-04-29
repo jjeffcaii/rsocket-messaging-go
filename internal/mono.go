@@ -6,11 +6,6 @@ import (
 	"github.com/rsocket/rsocket-go/rx/mono"
 )
 
-type Mono interface {
-	mono.Mono
-	BlockTo(ctx context.Context, to interface{}) error
-}
-
 type mustErrorMono struct {
 	mono.Mono
 }
