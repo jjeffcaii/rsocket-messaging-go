@@ -1,12 +1,14 @@
-package com.example.rsocket.demo;
+package com.example.rdemo;
 
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.joda.time.DateTime;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -35,6 +37,18 @@ public class StudentController {
   @MessageMapping("student.v1.{id}")
   public Mono<Student> getStudent(@DestinationVariable("id") Long id) {
     return Mono.just(Student.builder().id(id).name("foobar").birth("2020").build());
+  }
+
+  @MessageMapping("students.v1")
+  public Flux<Student> listStudents() {
+    return Flux.range(0, 10)
+        .map(
+            n ->
+                Student.builder()
+                    .id(Long.valueOf(n))
+                    .birth(DateTime.now().toString("yyyy-MM-dd"))
+                    .name("Foobar" + n)
+                    .build());
   }
 
   @Data

@@ -102,17 +102,6 @@ func (p *requestSpec) mkRequest() (payload.Payload, error) {
 	return payload.New(data, metadata), nil
 }
 
-func (p *requestSpec) RetrieveMono() spi.Mono {
-	req, err := p.mkRequest()
-	if err != nil {
-		return NewMonoWithError(err)
-	}
-	res := p.parent.socket.RequestResponse(req)
-	return NewMonoWithDecoder(res, func(raw []byte, v interface{}) error {
-		return json.Unmarshal(raw, v)
-	})
-}
-
 func (p *requestSpec) Retrieve() error {
 	req, err := p.mkRequest()
 	if err != nil {
@@ -120,6 +109,29 @@ func (p *requestSpec) Retrieve() error {
 	}
 	p.parent.socket.FireAndForget(req)
 	return nil
+}
+
+func (p *requestSpec) RetrieveMono() spi.Mono {
+	req, err := p.mkRequest()
+	if err != nil {
+		return NewMonoWithError(err)
+	}
+	res := p.parent.socket.RequestResponse(req)
+	return NewMonoWithDecoder(res, p.decode)
+}
+
+func (p *requestSpec) decode(raw []byte, v interface{}) error {
+	// TODO: support decoders
+	return json.Unmarshal(raw, v)
+}
+
+func (p *requestSpec) RetrieveFlux() spi.Flux {
+	req, err := p.mkRequest()
+	if err != nil {
+		return NewFluxWithError(err)
+	}
+	origin := p.parent.socket.RequestStream(req)
+	return NewFluxWithDecoder(origin, p.decode)
 }
 
 func RegisterEncoder(mimeType string, encoder FnEncode) {
