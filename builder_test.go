@@ -20,29 +20,27 @@ func (s Student) String() string {
 	return fmt.Sprintf("Student{ID=%d,Name=%s,Birth=%s}", s.ID, s.Name, s.Birth)
 }
 
-var requester spi.Requester
-
-func init() {
+func TestSuite(t *testing.T) {
 	// see: StudentController.java
-	r, err := messaging.Builder().
+	requester, err := messaging.Builder().
 		DataMimeType("application/json").
 		ConnectTCP("127.0.0.1", 7878).
 		Build(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	requester = r
-}
-
-func TestRetrieve(t *testing.T) {
+	assert.NoError(t, err, "connect failed")
 	defer requester.Close()
 
+	testRetrieve(t, requester)
+	testRetrieveMono(t, requester)
+	testRetrieveFluxChan(t, requester)
+	testRetrieveFluxAsSlice(t, requester)
+}
+
+func testRetrieve(t *testing.T, requester spi.Requester) {
 	err := requester.Route("student.v1.noop.%s", "hello").Retrieve()
 	assert.NoError(t, err, "request failed")
 }
 
-func TestRetrieveMono(t *testing.T) {
-	defer requester.Close()
+func testRetrieveMono(t *testing.T, requester spi.Requester) {
 	result := struct {
 		Code    int         `json:"code"`
 		Message string      `json:"message"`
@@ -63,8 +61,7 @@ func TestRetrieveMono(t *testing.T) {
 	fmt.Printf("result: %+v\n", result)
 }
 
-func TestRetrieveFlux(t *testing.T) {
-	defer requester.Close()
+func testRetrieveFluxChan(t *testing.T, requester spi.Requester) {
 	students := make(chan Student)
 	go func() {
 		for next := range students {
@@ -76,8 +73,7 @@ func TestRetrieveFlux(t *testing.T) {
 	assert.NoError(t, err, "retrieve flux failed")
 }
 
-func TestRetrieveFluxAsSlice(t *testing.T) {
-	defer requester.Close()
+func testRetrieveFluxAsSlice(t *testing.T, requester spi.Requester) {
 	students := make([]Student, 0)
 	err := requester.Route("students.v1").RetrieveFlux().BlockToSlice(context.Background(), &students)
 	assert.NoError(t, err, "retrieve flux failed")

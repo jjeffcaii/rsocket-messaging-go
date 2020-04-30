@@ -35,7 +35,7 @@ func NewMonoWithError(err error) *mustErrorMono {
 	}
 }
 
-func NewMonoWithDecoder(origin mono.Mono, decode FnDecode) *extraMono {
+func NewMonoWithDecoder(origin mono.Mono, decode FnUnmarshal) *extraMono {
 	return &extraMono{
 		Mono: origin,
 		dec:  decode,

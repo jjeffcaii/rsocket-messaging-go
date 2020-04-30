@@ -33,9 +33,9 @@ func (b *RequestBuilder) ConnectTCP(host string, port int, opts ...rsocket.Trans
 func (b *RequestBuilder) Build(ctx context.Context) (requester spi.Requester, err error) {
 	var metadata []byte
 	var data []byte
-	enc, ok := internal.LoadEncoder(b.dataMimeType)
-	if !ok {
-		err = errors.Errorf("no encoder for mime type %s", b.dataMimeType)
+	enc, _, err := internal.LoadCodec(b.dataMimeType)
+	if err != nil {
+		err = errors.Wrap(err, "build requester failed")
 		return
 	}
 	data, err = enc(b.setupData)
@@ -85,9 +85,9 @@ func (b *RequestBuilder) SetupRoute(route string, args ...interface{}) *RequestB
 
 func (b *RequestBuilder) SetupMetadata(metadata interface{}, mimeType string) *RequestBuilder {
 	b.setupMeta = append(b.setupMeta, func(writer io.Writer) (err error) {
-		enc, ok := internal.LoadEncoder(mimeType)
-		if !ok {
-			err = errors.Errorf("no encoder for mime type %s", mimeType)
+		enc, _, err := internal.LoadCodec(mimeType)
+		if err != nil {
+			err = errors.Wrap(err, "setup metadata failed")
 			return
 		}
 		b, err := enc(metadata)

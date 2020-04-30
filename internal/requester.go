@@ -10,7 +10,6 @@ import (
 )
 
 type requester struct {
-	encoders     map[string]FnEncode
 	dataMimeType string
 	socket       rsocket.RSocket
 }
@@ -18,7 +17,7 @@ type requester struct {
 func (p *requester) Route(route string, args ...interface{}) spi.RequestSpec {
 	return &requestSpec{
 		parent: p,
-		m: []Writeable{
+		m: []writeable{
 			func(writer io.Writer) (err error) {
 				b, err := extension.EncodeRouting(fmt.Sprintf(route, args...))
 				if err != nil {
@@ -41,22 +40,12 @@ func (p *requester) Close() (err error) {
 	return
 }
 
-func (p requester) getDataEncoder() (FnEncode, bool) {
-	return p.getEncoder(p.dataMimeType)
-}
-
-func (p requester) getEncoder(mimeType string) (enc FnEncode, ok bool) {
-	enc, ok = p.encoders[mimeType]
-	return
+func (p *requester) getCodec() (FnMarshal, FnUnmarshal, error) {
+	return LoadCodec(p.dataMimeType)
 }
 
 func NewRequester(socket rsocket.RSocket, dataMimeType string) *requester {
-	encoders := make(map[string]FnEncode)
-	for k, v := range _defaultEncodes {
-		encoders[k] = v
-	}
 	return &requester{
-		encoders:     encoders,
 		dataMimeType: dataMimeType,
 		socket:       socket,
 	}

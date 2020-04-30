@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	errRequireChan     = errors.New("require a chan")
+	errRequireChan     = errors.New("require a writeable chan")
 	errRequireSlicePtr = errors.New("require a slice ptr")
 )
 
@@ -27,6 +27,11 @@ func (s simpleFlux) BlockToChan(ctx context.Context, to interface{}) (err error)
 		err = errRequireChan
 		return
 	}
+	if typ.ChanDir()&reflect.SendDir == 0 {
+		err = errRequireChan
+		return
+	}
+
 	elem := typ.Elem()
 	ch := reflect.ValueOf(to)
 	done := make(chan struct{})
@@ -95,7 +100,15 @@ func (m mustErrFlux) BlockToChan(ctx context.Context, to interface{}) (err error
 }
 
 func (m mustErrFlux) BlockToSlice(ctx context.Context, to interface{}) error {
-	panic("implement me")
+	typ := reflect.TypeOf(to)
+	if typ.Kind() != reflect.Ptr {
+		return errRequireSlicePtr
+	}
+	if typ.Elem().Kind() != reflect.Slice {
+		return errRequireSlicePtr
+	}
+	_, err := m.BlockLast(ctx)
+	return err
 }
 
 func NewFluxWithDecoder(origin flux.Flux, dec func([]byte, interface{}) error) spi.Flux {

@@ -2,6 +2,6 @@ package messaging
 
 import "github.com/jjeffcaii/rsocket-messaging-go/internal"
 
-func RegisterEncoder(mimeType string, encoder func(interface{}) ([]byte, error)) {
-	internal.RegisterEncoder(mimeType, encoder)
+func RegisterCodec(mimeType string, marshal func(interface{}) ([]byte, error), unmarshal func([]byte, interface{}) error) error {
+	return internal.RegisterCodec(mimeType, marshal, unmarshal)
 }
