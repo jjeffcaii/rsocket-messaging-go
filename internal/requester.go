@@ -40,8 +40,12 @@ func (p *requester) Close() (err error) {
 	return
 }
 
-func (p *requester) getCodec() (FnMarshal, FnUnmarshal, error) {
-	return LoadCodec(p.dataMimeType)
+func (p *requester) Unmarshal(raw []byte, v interface{}) error {
+	return UnmarshalWithMimeType(raw, v, p.dataMimeType)
+}
+
+func (p *requester) Marshal(v interface{}) ([]byte, error) {
+	return MarshalWithMimeType(v, p.dataMimeType)
 }
 
 func NewRequester(socket rsocket.RSocket, dataMimeType string) *requester {

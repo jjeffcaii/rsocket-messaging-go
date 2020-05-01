@@ -5,14 +5,18 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"github.com/rsocket/rsocket-go/extension"
 )
 
 var (
-	errRequireStringPtr = errors.New("require string ptr")
-	_codecs             = make(map[string]codec)
+	errInvalidUnmarshalTarget = errors.New("invalid unmarshal target")
+	errRequireStringPtr       = errors.New("require string ptr")
+	errNilInterface           = errors.New("cannot unmarshal to nil target")
+	_codecs                   = make(map[string]codec)
 )
 
 type (
@@ -69,10 +73,59 @@ func RegisterCodec(mimeType string, encoder FnMarshal, decoder FnUnmarshal) erro
 	return nil
 }
 
-func LoadCodec(mimeType string) (FnMarshal, FnUnmarshal, error) {
+func LoadCodec(mimeType string) (enc FnMarshal, dec FnUnmarshal, ok bool) {
 	found, ok := _codecs[mimeType]
 	if !ok {
-		return nil, nil, errors.Errorf("no such codec for mime type %s", mimeType)
+		return
 	}
-	return found.enc, found.dec, nil
+	enc = found.enc
+	dec = found.dec
+	return
+}
+
+func UnmarshalWithMimeType(raw []byte, v interface{}, mimeType string) error {
+	_, dec, ok := LoadCodec(mimeType)
+	if ok {
+		return dec(raw, v)
+	}
+	// TODO: default unmarshal
+	if v == nil {
+		return errNilInterface
+	}
+	typ := reflect.TypeOf(v)
+	if typ.Kind() != reflect.Ptr {
+		return errInvalidUnmarshalTarget
+	}
+	value := reflect.ValueOf(v)
+	switch typ.Elem().Kind() {
+	case reflect.String:
+		value.Elem().SetString(string(raw))
+	case reflect.Slice:
+		if typ.Elem().Elem().Kind() == reflect.Uint8 {
+			return errInvalidUnmarshalTarget
+		}
+		value.Elem().SetBytes(raw)
+	default:
+		return errInvalidUnmarshalTarget
+	}
+	return errors.Errorf("cannot unmarshal for mime type %s", mimeType)
+}
+
+func MarshalWithMimeType(v interface{}, mimeType string) (raw []byte, err error) {
+	enc, _, ok := LoadCodec(mimeType)
+	if ok {
+		raw, err = enc(v)
+		return
+	}
+	switch vv := v.(type) {
+	case []byte:
+		raw = vv
+	case string:
+		raw = []byte(vv)
+	case io.Reader:
+		raw, err = ioutil.ReadAll(vv)
+	default:
+		err = errors.Errorf("cannot marshal for mime type %s", mimeType)
+	}
+	return
 }

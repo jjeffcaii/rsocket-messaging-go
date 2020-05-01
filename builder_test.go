@@ -36,7 +36,9 @@ func TestSuite(t *testing.T) {
 }
 
 func testRetrieve(t *testing.T, requester spi.Requester) {
-	err := requester.Route("student.v1.noop.%s", "hello").Retrieve()
+	err := requester.Route("student.v1.noop.%s", "hello").
+		Metadata("test unknown mime type", "unknown/mime.type").
+		Retrieve()
 	assert.NoError(t, err, "request failed")
 }
 
@@ -53,7 +55,6 @@ func testRetrieveMono(t *testing.T, requester spi.Requester) {
 	}
 	err := requester.
 		Route("student.v1.upsert").
-		Metadata([]string{}, "application/json").
 		Data(student).
 		RetrieveMono().
 		BlockTo(context.Background(), &result)

@@ -18,12 +18,7 @@ type requestSpec struct {
 
 func (p *requestSpec) Metadata(metadata interface{}, mimeType string) spi.RequestSpec {
 	p.m = append(p.m, func(writer io.Writer) (err error) {
-		enc, _, err := p.parent.getCodec()
-		if err != nil {
-			err = errors.Wrap(err, "encode metadata failed")
-			return
-		}
-		b, err := enc(metadata)
+		b, err := MarshalWithMimeType(metadata, mimeType)
 		if err != nil {
 			err = errors.Wrap(err, "encode metadata failed")
 			return
@@ -36,14 +31,27 @@ func (p *requestSpec) Metadata(metadata interface{}, mimeType string) spi.Reques
 
 func (p *requestSpec) Data(data interface{}) spi.RequestSpec {
 	p.d = func() (raw []byte, err error) {
-		enc, _, err := p.parent.getCodec()
-		if err != nil {
-			err = errors.Wrap(err, "encode data failed")
-			return
-		}
-		return enc(data)
+		return p.parent.Marshal(data)
 	}
 	return p
+}
+
+func (p *requestSpec) Retrieve() error {
+	req, err := p.mkRequest()
+	if err != nil {
+		return err
+	}
+	p.parent.socket.FireAndForget(req)
+	return nil
+}
+
+func (p *requestSpec) RetrieveMono() spi.Mono {
+	req, err := p.mkRequest()
+	if err != nil {
+		return NewMonoWithError(err)
+	}
+	res := p.parent.socket.RequestResponse(req)
+	return NewMonoWithDecoder(res, p.parent.Unmarshal)
 }
 
 func (p *requestSpec) mkRequest() (payload.Payload, error) {
@@ -71,37 +79,11 @@ func (p *requestSpec) mkRequest() (payload.Payload, error) {
 	return payload.New(data, metadata), nil
 }
 
-func (p *requestSpec) Retrieve() error {
-	req, err := p.mkRequest()
-	if err != nil {
-		return err
-	}
-	p.parent.socket.FireAndForget(req)
-	return nil
-}
-
-func (p *requestSpec) RetrieveMono() spi.Mono {
-	req, err := p.mkRequest()
-	if err != nil {
-		return NewMonoWithError(err)
-	}
-	res := p.parent.socket.RequestResponse(req)
-	return NewMonoWithDecoder(res, p.decode)
-}
-
-func (p *requestSpec) decode(raw []byte, v interface{}) error {
-	_, dec, err := p.parent.getCodec()
-	if err != nil {
-		return err
-	}
-	return dec(raw, v)
-}
-
 func (p *requestSpec) RetrieveFlux() spi.Flux {
 	req, err := p.mkRequest()
 	if err != nil {
 		return NewFluxWithError(err)
 	}
 	origin := p.parent.socket.RequestStream(req)
-	return NewFluxWithDecoder(origin, p.decode)
+	return NewFluxWithDecoder(origin, p.parent.Unmarshal)
 }

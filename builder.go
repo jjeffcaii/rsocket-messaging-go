@@ -8,7 +8,6 @@ import (
 
 	"github.com/jjeffcaii/rsocket-messaging-go/internal"
 	"github.com/jjeffcaii/rsocket-messaging-go/spi"
-	"github.com/pkg/errors"
 	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/extension"
 	"github.com/rsocket/rsocket-go/payload"
@@ -31,17 +30,11 @@ func (b *RequestBuilder) ConnectTCP(host string, port int, opts ...rsocket.Trans
 }
 
 func (b *RequestBuilder) Build(ctx context.Context) (requester spi.Requester, err error) {
+	data, err := internal.MarshalWithMimeType(b.setupData, b.dataMimeType)
+	if err != nil {
+		return
+	}
 	var metadata []byte
-	var data []byte
-	enc, _, err := internal.LoadCodec(b.dataMimeType)
-	if err != nil {
-		err = errors.Wrap(err, "build requester failed")
-		return
-	}
-	data, err = enc(b.setupData)
-	if err != nil {
-		return
-	}
 	if len(b.setupMeta) > 0 {
 		bf := bytes.Buffer{}
 		for _, it := range b.setupMeta {
@@ -85,12 +78,7 @@ func (b *RequestBuilder) SetupRoute(route string, args ...interface{}) *RequestB
 
 func (b *RequestBuilder) SetupMetadata(metadata interface{}, mimeType string) *RequestBuilder {
 	b.setupMeta = append(b.setupMeta, func(writer io.Writer) (err error) {
-		enc, _, err := internal.LoadCodec(mimeType)
-		if err != nil {
-			err = errors.Wrap(err, "setup metadata failed")
-			return
-		}
-		b, err := enc(metadata)
+		b, err := internal.MarshalWithMimeType(metadata, mimeType)
 		if err != nil {
 			return
 		}
