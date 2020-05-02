@@ -66,11 +66,15 @@ func (b *RequestBuilder) SetupRoute(route string, args ...interface{}) *RequestB
 		if err != nil {
 			return
 		}
-		raw, err := extension.EncodeRouting(r)
+		routing, err := extension.EncodeRouting(r)
 		if err != nil {
 			return
 		}
-		_, err = extension.NewCompositeMetadata(extension.MessageRouting.String(), raw).WriteTo(writer)
+		raw, err := extension.NewCompositeMetadataBuilder().PushWellKnown(extension.MessageRouting, routing).Build()
+		if err != nil {
+			return
+		}
+		_, err = writer.Write(raw)
 		return
 	})
 	return b
@@ -82,7 +86,11 @@ func (b *RequestBuilder) SetupMetadata(metadata interface{}, mimeType string) *R
 		if err != nil {
 			return
 		}
-		_, err = extension.NewCompositeMetadata(mimeType, b).WriteTo(writer)
+		c, err := extension.NewCompositeMetadataBuilder().Push(mimeType, b).Build()
+		if err != nil {
+			return
+		}
+		_, err = writer.Write(c)
 		return
 	})
 	return b

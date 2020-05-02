@@ -1,9 +1,6 @@
 package internal
 
 import (
-	"bytes"
-	"io"
-
 	"github.com/jjeffcaii/rsocket-messaging-go/spi"
 	"github.com/pkg/errors"
 	"github.com/rsocket/rsocket-go/extension"
@@ -12,18 +9,18 @@ import (
 
 type requestSpec struct {
 	parent *requester
-	m      []writeable
+	m      []func(*extension.CompositeMetadataBuilder) error
 	d      func() ([]byte, error)
 }
 
 func (p *requestSpec) Metadata(metadata interface{}, mimeType string) spi.RequestSpec {
-	p.m = append(p.m, func(writer io.Writer) (err error) {
+	p.m = append(p.m, func(builder *extension.CompositeMetadataBuilder) (err error) {
 		b, err := MarshalWithMimeType(metadata, mimeType)
 		if err != nil {
 			err = errors.Wrap(err, "encode metadata failed")
 			return
 		}
-		_, err = extension.NewCompositeMetadata(mimeType, b).WriteTo(writer)
+		builder.Push(mimeType, b)
 		return
 	})
 	return p
@@ -60,13 +57,18 @@ func (p *requestSpec) mkRequest() (payload.Payload, error) {
 		metadata []byte
 	)
 	if p.m != nil {
-		bf := bytes.Buffer{}
-		for _, writeable := range p.m {
-			if err := writeable(&bf); err != nil {
+		bu := extension.NewCompositeMetadataBuilder()
+		for _, it := range p.m {
+			if err := it(bu); err != nil {
 				return nil, err
 			}
 		}
-		metadata = bf.Bytes()
+		m, err := bu.Build()
+		if err != nil {
+			return nil, err
+
+		}
+		metadata = m
 	}
 	if p.d != nil {
 		var err error

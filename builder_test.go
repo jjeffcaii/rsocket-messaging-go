@@ -7,7 +7,6 @@ import (
 
 	"github.com/jjeffcaii/rsocket-messaging-go"
 	"github.com/jjeffcaii/rsocket-messaging-go/spi"
-	"github.com/rsocket/rsocket-go/extension"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,7 +37,7 @@ func TestSuite(t *testing.T) {
 
 func testRetrieve(t *testing.T, requester spi.Requester) {
 	err := requester.Route("student.v1.noop.%s", "hello").
-		Metadata("test unknown mime type", extension.MessageAuthentication.String()).
+		Metadata("test unknown mime type", "message/x.rsocket.authentication.bearer.v0").
 		Retrieve()
 	assert.NoError(t, err, "request failed")
 }

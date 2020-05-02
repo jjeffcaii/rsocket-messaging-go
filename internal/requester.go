@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/jjeffcaii/rsocket-messaging-go/spi"
 	"github.com/rsocket/rsocket-go"
@@ -17,16 +16,13 @@ type requester struct {
 func (p *requester) Route(route string, args ...interface{}) spi.RequestSpec {
 	return &requestSpec{
 		parent: p,
-		m: []writeable{
-			func(writer io.Writer) (err error) {
+		m: []func(*extension.CompositeMetadataBuilder) error{
+			func(builder *extension.CompositeMetadataBuilder) (err error) {
 				b, err := extension.EncodeRouting(fmt.Sprintf(route, args...))
 				if err != nil {
 					return
 				}
-				_, err = extension.NewCompositeMetadata(extension.MessageRouting.String(), b).WriteTo(writer)
-				if err != nil {
-					return
-				}
+				builder.PushWellKnown(extension.MessageRouting, b)
 				return
 			},
 		},
